@@ -15,7 +15,7 @@ Xueness does not ship these plugins. When a user chooses one in the marketplace,
 | [订阅中心](plugins/subscriptions) `subscriptions` | 导入自己授权的账号或登录凭证，使用其模型与可用额度 |
 | [返回模型监测](plugins/model_monitor) `model_monitor` | 被动比较请求的型号与响应中报告的型号，不额外发送探测请求 |
 | [WorkBuddy 号池](plugins/workbuddy) `workbuddy` | 添加自备账号认证、查看号池状态并使用可用模型 |
-| [酒馆](plugins/tavern) `tavern` | 导入 SillyTavern 兼容的角色卡与世界书，从角色设定开始一段对话 |
+| [酒馆](plugins/tavern) `tavern` | SillyTavern 兼容的角色卡、世界书、预设与人设；专用面板，对话以角色扮演模式运行 |
 
 ## 目录 · Layout
 
