@@ -1,0 +1,12 @@
+{
+  "name": "xueness-marketplace",
+  "private": true,
+  "type": "module",
+  "description": "Official downloadable plugins for Xueness: source, build and the pinned packages the app downloads.",
+  "license": "Apache-2.0",
+  "scripts": {
+    "check": "node ../xueness/ts/node_modules/typescript/bin/tsc -p tsconfig.backend.json && node ../xueness/webapp/node_modules/typescript/bin/tsc -p tsconfig.frontend.json",
+    "build": "node scripts/build.ts --core ../xueness",
+    "release": "node scripts/build.ts --core ../xueness --write-core"
+  }
+}

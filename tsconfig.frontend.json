@@ -1,0 +1,24 @@
+{
+  "//": "Plugin interfaces use the workbench's React and @xueness/host (host/xueness-host.d.ts); types come from a Xueness checkout at ../xueness.",
+  "compilerOptions": {
+    "target": "ESNext",
+    "lib": ["DOM", "DOM.Iterable", "ESNext"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "forceConsistentCasingInFileNames": true,
+    "typeRoots": ["../xueness/webapp/node_modules/@types"],
+    "types": [],
+    "paths": {
+      "react": ["../xueness/webapp/node_modules/@types/react"],
+      "react/jsx-runtime": ["../xueness/webapp/node_modules/@types/react/jsx-runtime"],
+      "lucide-react": ["../xueness/webapp/node_modules/lucide-react"]
+    }
+  },
+  "include": ["host/*.d.ts", "plugins/*/frontend/**/*.ts", "plugins/*/frontend/**/*.tsx"]
+}

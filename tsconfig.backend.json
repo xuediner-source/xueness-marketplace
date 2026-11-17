@@ -1,0 +1,12 @@
+{
+  "//": "Plugin backends run inside Xueness, so they are checked against a Xueness checkout next to this repository (../xueness).",
+  "extends": "../xueness/ts/tsconfig.base.json",
+  "compilerOptions": {
+    "typeRoots": ["../xueness/ts/node_modules/@types"],
+    "paths": {
+      "@xueness/*": ["../xueness/ts/packages/*/src/index.ts"],
+      "vite": ["../xueness/webapp/node_modules/vite/dist/node/index.d.ts"]
+    }
+  },
+  "include": ["plugins/*/backend/src/**/*.ts", "scripts/**/*.ts"]
+}
