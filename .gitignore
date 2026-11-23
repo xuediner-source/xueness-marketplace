@@ -1,5 +1,3 @@
 node_modules/
-# Account material for WorkBuddy must never be committed.
-plugins/workbuddy/backend/assets/auths/
 *.log
 .DS_Store

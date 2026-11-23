@@ -12,9 +12,8 @@ Xueness does not ship these plugins. When a user chooses one in the marketplace,
 
 | 插件 | 作用 |
 | :-- | :-- |
-| [订阅中心](plugins/subscriptions) `subscriptions` | 导入自己授权的账号或登录凭证，使用其模型与可用额度 |
+| [Magpie 模型网关](plugins/magpie) `magpie` | magpie 原版本机网关：API 密钥、订阅登录账号、路由组、额度与用量，模型进入会话 |
 | [返回模型监测](plugins/model_monitor) `model_monitor` | 被动比较请求的型号与响应中报告的型号，不额外发送探测请求 |
-| [WorkBuddy 号池](plugins/workbuddy) `workbuddy` | 添加自备账号认证、查看号池状态并使用可用模型 |
 | [酒馆](plugins/tavern) `tavern` | SillyTavern 兼容的角色卡、世界书、预设与人设；专用面板，对话以角色扮演模式运行 |
 
 ## 目录 · Layout
@@ -54,4 +53,4 @@ npm run release    # 同上，并把固定摘要写入 ../xueness
 
 ## 许可 · License
 
-[Apache-2.0](LICENSE)。第三方组件见各插件目录（例如 `plugins/subscriptions/backend/assets/vendor/LICENSE-MIT.txt`）。
+[Apache-2.0](LICENSE)。第三方组件见各插件目录（例如 `plugins/magpie/backend/assets/LICENSE-magpie.txt`）。

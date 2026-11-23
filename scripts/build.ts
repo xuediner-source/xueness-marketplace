@@ -12,9 +12,17 @@
  * --prune       delete package files in packages/ that the new pins do not name.
  *               Leave them by default: a released core pins its own versions.
  *
+ * --bin-dir     where the upstream programs named in a plugin's backend/upstream.json
+ *               are read from (default: ../vendor-src/<name>-release-v<version>).
+ *               Nothing is downloaded here; each program must match its pinned SHA-256.
+ *
  * For each plugin a package is `{id, version, files[]}` as gzipped JSON:
  *   backend/package.json, backend/manifest.json, backend/src/**, the manifest's
  *   backendAssets and dataFiles, and frontend/optional-<id>.js (+ .css).
+ * A plugin with backend/upstream.json wraps an unmodified upstream program: it is
+ * packaged once per platform listed there, each package adding
+ * backend/assets/upstream.json and the platform's program as backend/assets/<name>
+ * (`.exe` on Windows), pinned as `<id>@<platform>-<arch>`.
  * The pin is the SHA-256 and size of the uncompressed JSON, not of the gzip
  * stream, which differs between zlib builds for identical input.
  */
@@ -85,6 +93,36 @@ async function buildFrontend(id: string): Promise<{ name: string; bytes: Buffer 
   } finally { rmSync(out, { recursive: true, force: true }); }
 }
 
+type PackageFile = { path: string; bytes: Buffer; executable: boolean };
+/** Platforms an upstream program may be packaged for, in pin order. */
+const PLATFORMS = ["win32-x64", "win32-arm64", "linux-x64", "linux-arm64", "darwin-x64", "darwin-arm64"];
+
+/**
+ * One variant without extra files for an ordinary plugin; for a plugin wrapping an
+ * upstream program, one variant per listed platform with that program and the
+ * provenance file. The program bytes are checked, never altered.
+ */
+function upstreamVariants(id: string, backend: string): { platform: string | null; files: PackageFile[] }[] {
+  const path = join(backend, "upstream.json");
+  if (!existsSync(path)) return [{ platform: null, files: [] }];
+  const upstream = readJson(path) as { name?: unknown; version?: unknown; binaries?: Record<string, { file?: unknown; sha256?: unknown }> };
+  const name = String(upstream.name ?? ""), version = String(upstream.version ?? "");
+  if (!/^[a-z][a-z0-9-]*$/.test(name) || !/^[0-9][0-9A-Za-z.+-]*$/.test(version) || !upstream.binaries) throw new Error(`${id}/upstream.json needs name, version and binaries`);
+  const bins = resolve(REPO, option("--bin-dir") ?? `../vendor-src/${name}-release-v${version}`);
+  const provenance: PackageFile = { path: "backend/assets/upstream.json", bytes: readFileSync(path), executable: false };
+  const platforms = Object.keys(upstream.binaries);
+  const unknown = platforms.filter((platform) => !PLATFORMS.includes(platform));
+  if (unknown.length) throw new Error(`${id}/upstream.json: unknown platforms ${unknown.join(", ")}`);
+  return PLATFORMS.filter((platform) => platforms.includes(platform)).map((platform) => {
+    const entry = upstream.binaries![platform]!, file = String(entry.file ?? "");
+    if (!/^[A-Za-z0-9._-]+$/.test(file) || !/^[0-9a-f]{64}$/.test(String(entry.sha256 ?? ""))) throw new Error(`${id}/upstream.json: invalid entry for ${platform}`);
+    const bytes = readFileSync(join(bins, file));
+    if (sha(bytes) !== entry.sha256) throw new Error(`${id}: ${file} does not match its pinned SHA-256`);
+    const windows = platform.startsWith("win32-");
+    return { platform, files: [provenance, { path: `backend/assets/${name}${windows ? ".exe" : ""}`, bytes, executable: !windows }] };
+  });
+}
+
 const packages = join(REPO, "packages"); mkdirSync(packages, { recursive: true });
 const pins: Record<string, unknown> = {};
 for (const id of ids) {
@@ -99,24 +137,28 @@ for (const id of ids) {
   if (typeof packageId !== "string" || !packageId || manifest.id !== id || typeof manifest.version !== "string") throw new Error(`${id}: manifest needs id, version and installPackage`);
   const paths = [...new Set(["package.json", "manifest.json", ...walk(join(backend, "src"), "src"),
     ...(manifest.backendAssets as string[] | undefined ?? []), ...(manifest.dataFiles as string[] | undefined ?? [])])].sort();
-  const files: { path: string; bytes: Buffer; executable: boolean }[] = paths.map((path) => {
+  const common: PackageFile[] = paths.map((path) => {
     if (path.includes("..") || path.includes("auths") || path.includes("\\") || lstatSync(join(backend, path)).isSymbolicLink()) throw new Error(`Unsafe source path ${id}/${path}`);
     const stat = lstatSync(join(backend, path));
     return { path: `backend/${path}`, bytes: readFileSync(join(backend, path)), executable: (stat.mode & 0o111) !== 0 && /\.(?:sh|mjs)$/.test(path) };
   });
-  files.push(...(await buildFrontend(id)).map((file) => ({ path: `frontend/${file.name}`, bytes: file.bytes, executable: false })));
-  const plain = Buffer.from(JSON.stringify({ id, version: manifest.version, files: files.map((file) => ({ path: file.path, content: file.bytes.toString("base64") })) }));
-  const digest = sha(plain), filename = `${packageId}-${manifest.version}-${digest.slice(0, 16)}.json.gz`;
-  writeFileSync(join(packages, filename), gzipSync(plain, { level: 9 }));
-  pins[id] = { id, packageId, version: manifest.version, sha256: digest, bytes: plain.length, url: URL_BASE + filename,
-    files: files.map((file) => ({ path: file.path, bytes: file.bytes.length, sha256: sha(file.bytes), executable: file.executable })) };
-  process.stdout.write(`${id}: ${filename} (${files.length} files, ${plain.length} bytes)\n`);
+  common.push(...(await buildFrontend(id)).map((file) => ({ path: `frontend/${file.name}`, bytes: file.bytes, executable: false })));
+  for (const variant of upstreamVariants(id, backend)) {
+    const files = [...common, ...variant.files].sort((a, b) => a.path.localeCompare(b.path, "en"));
+    const plain = Buffer.from(JSON.stringify({ id, version: manifest.version, files: files.map((file) => ({ path: file.path, content: file.bytes.toString("base64") })) }));
+    const digest = sha(plain), filename = `${packageId}-${manifest.version}-${variant.platform ? `${variant.platform}-` : ""}${digest.slice(0, 16)}.json.gz`;
+    writeFileSync(join(packages, filename), gzipSync(plain, { level: 9 }));
+    pins[variant.platform ? `${id}@${variant.platform}` : id] = { id, packageId, version: manifest.version, sha256: digest, bytes: plain.length, url: URL_BASE + filename,
+      files: files.map((file) => ({ path: file.path, bytes: file.bytes.length, sha256: sha(file.bytes), executable: file.executable })) };
+    process.stdout.write(`${variant.platform ? `${id}@${variant.platform}` : id}: ${filename} (${files.length} files, ${plain.length} bytes)\n`);
+  }
 }
 
 const encoded = JSON.stringify(pins, null, 2) + "\n";
 writeFileSync(join(REPO, "pins.json"), encoded);
 if (flag("--prune")) {
   const keep = new Set(Object.values(pins).map((pin) => (pin as { url: string }).url.slice(URL_BASE.length)));
+  // Pruning only ever looks at package files; upstream programs are never stored in packages/ on their own.
   for (const name of readdirSync(packages)) if (name.endsWith(".json.gz") && !keep.has(name)) { rmSync(join(packages, name)); process.stdout.write(`pruned ${name}\n`); }
 }
 if (flag("--write-core")) {

@@ -1,0 +1,16 @@
+{
+  "name": "magpie",
+  "source": "https://github.com/yetone/magpie",
+  "releases": "https://github.com/yetone/magpie-releases",
+  "version": "0.1.4685",
+  "license": "MIT",
+  "copyright": "Copyright (c) 2026 yetone",
+  "binaries": {
+    "win32-x64": { "file": "magpie-cli-windows-amd64.exe", "sha256": "48a432ce17a9ecf941132f73b75b5da05b39cdd62551213a6873624251c6bc6e" },
+    "win32-arm64": { "file": "magpie-cli-windows-arm64.exe", "sha256": "a9dc74118b8717b0234ffebc0b2329d9ddf39eef466b14a28672adf12b537ad9" },
+    "linux-x64": { "file": "magpie-cli-linux-amd64", "sha256": "f20f8c165ff07beb892f9902d5a4280826b8d28811a2c0eda73d6cfec3e371f0" },
+    "linux-arm64": { "file": "magpie-cli-linux-arm64", "sha256": "3c22b3545f1227e6a2f617ed12c15e05b0cc54d5775ed2b86a4931e7f3e1e510" },
+    "darwin-x64": { "file": "magpie-cli-darwin-amd64", "sha256": "51d31d346fe2af8c13d53c6ac6cfa3dd117a5191d08ade14e63d01842aa91e1a" },
+    "darwin-arm64": { "file": "magpie-cli-darwin-arm64", "sha256": "ce0ab139d98faa2c11659d2393573c6f0c581bad10b940ea015a49fbd8dbbcce" }
+  }
+}
