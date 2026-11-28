@@ -7,7 +7,7 @@
  * list) and the `character_book` embedded in a V2/V3 card. Everything is bounded and copied field by field;
  * unknown fields are dropped, and nothing in a card is executed or fetched.
  */
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 
 type Row = Record<string, unknown>;
 export const MAX_CARD_BYTES = 768 * 1024;
@@ -29,13 +29,16 @@ export interface BookEntry {
   /** Content of this entry is not scanned for further keys. */
   preventRecursion?: boolean;
 }
-export interface WorldBook { id: string; name: string; description: string; entries: BookEntry[]; importedAt: string; fileName: string }
+export interface WorldBook { id: string; name: string; description: string; entries: BookEntry[]; importedAt: string; fileName: string; updatedAt?: string }
 export interface Character {
   id: string; name: string; description: string; personality: string; scenario: string; firstMessage: string; alternateGreetings: string[];
   exampleMessages: string; systemPrompt: string; postHistoryInstructions: string; creator: string; creatorNotes: string; tags: string[]; spec: string;
   book: BookEntry[]; importedAt: string; fileName: string;
   /** A small picture taken from a PNG card by the page (data URL, at most 64 KB). */
   avatar?: string;
+  /** Tavern 2.1: pinned to the top of the library; when it was last edited here. */
+  favorite?: boolean;
+  updatedAt?: string;
 }
 export class CardError extends Error {
   readonly code: string;
@@ -121,6 +124,76 @@ export function parseCharacter(source: unknown, fileName: unknown, now: string):
     creator: line(data.creator, 120), creatorNotes: text(data.creator_notes ?? data.creatorcomment, 4000), tags: strings(data.tags, 24, 40),
     spec: line(document.spec, 40) || "chara_card_v1", book, importedAt: now, fileName: line(fileName, 200),
   };
+}
+
+/**
+ * Entries as the panel edits them (this module's own `BookEntry` shape), bounded field by field. An entry
+ * without content does nothing and is dropped, as on import.
+ */
+export function editedEntries(value: unknown): BookEntry[] {
+  const entries: BookEntry[] = [];
+  for (const item of Array.isArray(value) ? value : []) {
+    if (!isObject(item) || entries.length >= MAX_ENTRIES) continue;
+    const content = text(item.content, MAX_ENTRY_TEXT).trim();
+    if (!content) continue;
+    const order = Number(item.order), probability = Number(item.probability);
+    const entry: BookEntry = {
+      keys: strings(item.keys, MAX_KEYS, 120), secondary: strings(item.secondary, MAX_KEYS, 120), content,
+      constant: item.constant === true, enabled: item.enabled !== false,
+      order: Number.isFinite(order) ? Math.max(-100000, Math.min(100000, Math.trunc(order))) : 100, comment: line(item.comment, 200),
+      position: item.position === "after" ? "after" : "before",
+    };
+    if (LOGIC.includes(item.selectiveLogic as SelectiveLogic)) entry.selectiveLogic = item.selectiveLogic as SelectiveLogic;
+    if (Number.isFinite(probability) && probability >= 0 && probability < 100) entry.probability = Math.round(probability);
+    const caseSensitive = flag(item.caseSensitive), whole = flag(item.matchWholeWords);
+    if (caseSensitive !== null) entry.caseSensitive = caseSensitive;
+    if (whole !== null) entry.matchWholeWords = whole;
+    if (item.preventRecursion === true) entry.preventRecursion = true;
+    entries.push(entry);
+  }
+  return entries;
+}
+
+/** The fields of a character the panel can create or change. */
+const CHARACTER_TEXT = ["description", "personality", "scenario", "firstMessage", "exampleMessages", "systemPrompt", "postHistoryInstructions"] as const;
+
+/**
+ * A character written in the panel: a new one (no `existing`) or an edit of `existing`. Only the fields the
+ * input names change; `avatar: null` removes the picture. A character needs a name, nothing else.
+ */
+export function editedCharacter(input: unknown, now: string, existing?: Character): Character {
+  const raw = isObject(input) ? input : {};
+  const has = (key: string): boolean => Object.prototype.hasOwnProperty.call(raw, key);
+  const base: Character = existing ?? {
+    id: "", name: "", description: "", personality: "", scenario: "", firstMessage: "", alternateGreetings: [], exampleMessages: "", systemPrompt: "",
+    postHistoryInstructions: "", creator: "", creatorNotes: "", tags: [], spec: "chara_card_v2", book: [], importedAt: now, fileName: "",
+  };
+  const next: Character = { ...base, updatedAt: now };
+  if (has("name")) next.name = line(raw.name, 120);
+  if (!next.name) throw new CardError("invalid_card", "a character needs a name");
+  for (const key of CHARACTER_TEXT) if (has(key)) next[key] = text(raw[key]);
+  if (has("alternateGreetings")) next.alternateGreetings = Array.isArray(raw.alternateGreetings) ? raw.alternateGreetings.filter((item): item is string => typeof item === "string" && item.trim() !== "").slice(0, MAX_GREETINGS).map(item => text(item)) : [];
+  if (has("creator")) next.creator = line(raw.creator, 120);
+  if (has("creatorNotes")) next.creatorNotes = text(raw.creatorNotes, 4000);
+  if (has("tags")) next.tags = [...new Set(strings(raw.tags, 24, 40))];
+  if (has("book")) next.book = editedEntries(raw.book);
+  if (has("favorite")) next.favorite = raw.favorite === true;
+  if (has("avatar")) { const picture = avatarData(raw.avatar); if (picture) next.avatar = picture; else delete next.avatar; }
+  if (!existing) next.id = contentId(next.name, `${now}\u0000${randomBytes(8).toString("hex")}`);
+  return next;
+}
+
+/** A world book written in the panel: a new, empty one, or an edit of `existing` (name, description, entries). */
+export function editedWorldBook(input: unknown, now: string, existing?: WorldBook): WorldBook {
+  const raw = isObject(input) ? input : {};
+  const has = (key: string): boolean => Object.prototype.hasOwnProperty.call(raw, key);
+  const next: WorldBook = existing ? { ...existing, updatedAt: now } : { id: "", name: "", description: "", entries: [], importedAt: now, fileName: "", updatedAt: now };
+  if (has("name") || !existing) next.name = line(raw.name, 120);
+  if (!next.name) throw new CardError("invalid_book", "a world book needs a name");
+  if (has("description")) next.description = text(raw.description, 2000);
+  if (has("entries")) next.entries = editedEntries(raw.entries);
+  if (!existing) next.id = contentId(next.name, `${now}\u0000${randomBytes(8).toString("hex")}`);
+  return next;
 }
 
 export function parseWorldBook(source: unknown, fileName: unknown, now: string): WorldBook {

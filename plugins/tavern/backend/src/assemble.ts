@@ -15,7 +15,7 @@ export interface AssembleInput {
 export interface AssembledSection { id: SectionId; title: string; text: string }
 export interface Assembled {
   system: string; sections: AssembledSection[]; greeting: string; authorNote: { text: string; depth: number } | null; postHistory: string;
-  activated: { name: string; source: string; reason: Activated["reason"]; key: string; position: "before" | "after" }[]; droppedEntries: number;
+  activated: { name: string; source: string; reason: Activated["reason"]; key: string; position: "before" | "after"; content: string }[]; droppedEntries: number;
 }
 
 const MAX_SYSTEM_CHARS = 120_000;
@@ -78,7 +78,7 @@ export function assembleRoleplay(input: AssembleInput): Assembled {
   const note = fill(preset.authorNote.text);
   return {
     system, sections, greeting, postHistory, authorNote: note ? { text: note, depth: preset.authorNote.depth } : null,
-    activated: [...world.before, ...world.after].map(item => ({ name: item.entry.comment || item.entry.keys[0] || item.entry.content.slice(0, 40), source: item.source, reason: item.reason, key: item.key, position: item.entry.position ?? "before" })),
+    activated: [...world.before, ...world.after].map(item => ({ name: item.entry.comment || item.entry.keys[0] || item.entry.content.slice(0, 40), source: item.source, reason: item.reason, key: item.key, position: item.entry.position ?? "before", content: fill(item.entry.content).slice(0, 2000) })),
     droppedEntries: world.dropped,
   };
 }

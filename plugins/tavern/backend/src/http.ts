@@ -3,11 +3,16 @@
  *
  *   GET    /api/tavern                          everything the panel lists (summaries)
  *   GET    /api/tavern/characters/:id           one character in full
+ *   GET    /api/tavern/avatars/:kind/:id        { avatar } of a character or persona (the conversation view reads it)
  *   POST   /api/tavern/characters               { card, fileName?, avatar? }   card is JSON text (the page reads PNG cards)
+ *                                               { character }                  a new character written in the panel
+ *   POST   /api/tavern/characters/:id           { character }                  change the fields it names (favorite, avatar: null, …)
  *   DELETE /api/tavern/characters/:id
  *   GET    /api/tavern/worldbooks/:id           one book with its entries
- *   POST   /api/tavern/worldbooks               { book, fileName? }
- *   POST   /api/tavern/worldbooks/:id           { entries: [{ index, enabled?, constant? }] }
+ *   POST   /api/tavern/worldbooks               { book, fileName? }            import
+ *                                               { create: { name, description? } }   a new, empty book
+ *   POST   /api/tavern/worldbooks/:id           { book: { name?, description?, entries? } }   edit; or the older
+ *                                               { entries: [{ index, enabled?, constant? }] } switches
  *   DELETE /api/tavern/worldbooks/:id
  *   POST   /api/tavern/presets                  { preset }            create or update
  *   POST   /api/tavern/presets/import           { json, name? }       a SillyTavern chat-completion preset
@@ -16,14 +21,14 @@
  *   DELETE /api/tavern/personas/:id
  *   POST   /api/tavern/settings                 { activePresetId?, activePersonaId?, globalWorldbooks? }
  *   POST   /api/tavern/playthroughs             { characterId, greeting?, presetId?, personaId?, worldbooks?, title? }
- *   POST   /api/tavern/playthroughs/:id         { title }
+ *   POST   /api/tavern/playthroughs/:id         { title?, presetId?, personaId?, worldbooks?, greeting? }   takes effect on the next request
  *   DELETE /api/tavern/playthroughs/:id         forgets the playthrough; the chat session stays
  *   POST   /api/tavern/preview                  { characterId, greeting?, presetId?, personaId?, worldbooks?, sample? }
  *   POST   /api/tavern/brief                    Tavern 1's opening message, kept for older pages
  *
  * Refused requests answer 200 with `ok: false` and a stable code. No model request is made here.
  */
-import { avatarData, CardError, MAX_CARD_BYTES, parseCharacter, parseWorldBook, type Character, type WorldBook } from "./cards.ts";
+import { avatarData, CardError, editedCharacter, editedWorldBook, MAX_CARD_BYTES, parseCharacter, parseWorldBook, type Character, type WorldBook } from "./cards.ts";
 import { assembleRoleplay, greetingsOf } from "./assemble.ts";
 import { defaultPreset, importSillyTavernPreset, newId, normalizePersona, normalizePreset, normalizeSettings, type Persona, type Playthrough, type Preset } from "./presets.ts";
 import { roleplayBrief } from "./prompt.ts";
@@ -38,15 +43,20 @@ const refuse = (code: string, message: string): Reply => [200, { ok: false, erro
 const clip = (text: string, max: number): string => text.length > max ? text.slice(0, max) + "…" : text;
 const ids = (value: unknown): string[] => Array.isArray(value) ? [...new Set(value.filter((item): item is string => typeof item === "string"))].slice(0, 16) : [];
 
-const characterSummary = (item: Character, playthroughs: readonly Playthrough[]) => ({
-  id: item.id, name: item.name, creator: item.creator, tags: item.tags, spec: item.spec, importedAt: item.importedAt, fileName: item.fileName,
-  avatar: item.avatar ?? null, description: clip(item.description.trim(), 400), scenario: clip(item.scenario.trim(), 300),
-  greetings: greetingsOf(item).map(text => clip(text.trim(), 240)), bookEntries: item.book.length,
-  hasExamples: item.exampleMessages.trim() !== "", hasSystemPrompt: item.systemPrompt.trim() !== "",
-  playthroughs: playthroughs.filter(row => row.characterId === item.id).length,
-});
+const characterSummary = (item: Character, playthroughs: readonly Playthrough[]) => {
+  const own = playthroughs.filter(row => row.characterId === item.id);
+  return {
+    id: item.id, name: item.name, creator: item.creator, tags: item.tags, spec: item.spec, importedAt: item.importedAt, fileName: item.fileName,
+    avatar: item.avatar ?? null, description: clip(item.description.trim(), 400), scenario: clip(item.scenario.trim(), 300),
+    greetings: greetingsOf(item).map(text => clip(text.trim(), 240)), bookEntries: item.book.length,
+    hasExamples: item.exampleMessages.trim() !== "", hasSystemPrompt: item.systemPrompt.trim() !== "",
+    playthroughs: own.length, favorite: item.favorite === true, updatedAt: item.updatedAt ?? item.importedAt,
+    // Playthroughs come newest first.
+    lastPlayedAt: own[0]?.lastUsedAt ?? null,
+  };
+};
 const bookSummary = (item: WorldBook) => ({
-  id: item.id, name: item.name, description: clip(item.description.trim(), 300), importedAt: item.importedAt, fileName: item.fileName,
+  id: item.id, name: item.name, description: clip(item.description.trim(), 300), importedAt: item.importedAt, fileName: item.fileName, updatedAt: item.updatedAt ?? item.importedAt,
   entries: item.entries.length, constant: item.entries.filter(entry => entry.enabled && entry.constant).length, disabled: item.entries.filter(entry => !entry.enabled).length,
 });
 
@@ -85,6 +95,10 @@ export function createTavernHttp(options: TavernHttpOptions) {
       const [, , kind, id, action] = parts;
       try {
         if (method === "GET" && parts.length === 2) return [200, listing()];
+        if (method === "GET" && parts.length === 5 && kind === "avatars" && (id === "characters" || id === "personas")) {
+          const item = store.get<{ avatar?: string }>(id, action);
+          return item?.avatar ? [200, { ok: true, avatar: item.avatar }] : refuse("not_found", "that picture is not in the library");
+        }
         if (method === "GET" && parts.length === 4 && (kind === "characters" || kind === "worldbooks")) {
           const item = store.get<Character | WorldBook>(kind, id);
           return item ? [200, { ok: true, item }] : refuse("not_found", "that item is not in the library");
@@ -99,15 +113,30 @@ export function createTavernHttp(options: TavernHttpOptions) {
 
         if ((kind === "characters" || kind === "worldbooks") && parts.length === 3) {
           if (store.full(kind)) return refuse("library_full", `the library holds at most ${MAX_ITEMS} ${kind}`);
-          const item = kind === "characters" ? { ...parseCharacter(body.card, body.fileName, now()), ...(avatarData(body.avatar) ? { avatar: avatarData(body.avatar) } : {}) }
-            : parseWorldBook(body.book, body.fileName, now());
+          const item = kind === "characters"
+            ? isObject(body.character) && body.card === undefined ? editedCharacter(body.character, now())
+              : { ...parseCharacter(body.card, body.fileName, now()), ...(avatarData(body.avatar) ? { avatar: avatarData(body.avatar) } : {}) }
+            : isObject(body.create) && body.book === undefined ? editedWorldBook(body.create, now())
+              : parseWorldBook(body.book, body.fileName, now());
           const replaced = store.get(kind, item.id) !== null;
           store.put(kind, item);
           return ok({ replaced, itemId: item.id });
         }
+        if (kind === "characters" && parts.length === 4) {
+          const existing = store.get<Character>("characters", id);
+          if (!existing) return refuse("not_found", "that character is not in the library");
+          const item = editedCharacter(isObject(body.character) ? body.character : {}, now(), existing);
+          store.put("characters", item);
+          return ok({ itemId: item.id, item });
+        }
         if (kind === "worldbooks" && parts.length === 4) {
           const book = store.get<WorldBook>("worldbooks", id);
           if (!book) return refuse("not_found", "that world book is not in the library");
+          if (isObject(body.book)) {
+            const item = editedWorldBook(body.book, now(), book);
+            store.put("worldbooks", item);
+            return ok({ itemId: item.id, item });
+          }
           const entries = book.entries.map(entry => ({ ...entry }));
           for (const patch of Array.isArray(body.entries) ? body.entries.slice(0, 1000) : []) {
             if (!isObject(patch) || !Number.isInteger(patch.index) || !entries[patch.index as number]) continue;
@@ -160,8 +189,20 @@ export function createTavernHttp(options: TavernHttpOptions) {
         if (kind === "playthroughs" && parts.length === 4) {
           const row = store.get<Playthrough>("playthroughs", id);
           if (!row) return refuse("not_found", "that playthrough no longer exists");
-          if (typeof body.title === "string" && body.title.trim()) store.put("playthroughs", { ...row, title: body.title.trim().slice(0, 80) });
-          return ok();
+          const next: Playthrough = { ...row };
+          if (typeof body.title === "string" && body.title.trim()) next.title = body.title.trim().slice(0, 80);
+          if (body.presetId !== undefined) {
+            if (!preset(body.presetId)) return refuse("not_found", "that preset is not in the library");
+            next.presetId = String(body.presetId);
+          }
+          if (body.personaId !== undefined) {
+            if (body.personaId !== null && !store.get<Persona>("personas", body.personaId)) return refuse("not_found", "that persona is not in the library");
+            next.personaId = body.personaId === null ? null : String(body.personaId);
+          }
+          if (body.worldbooks !== undefined) next.worldbooks = ids(body.worldbooks).filter(book => store.get<WorldBook>("worldbooks", book) !== null);
+          if (body.greeting !== undefined) next.greeting = Math.max(0, Math.trunc(Number(body.greeting) || 0));
+          store.put("playthroughs", next);
+          return ok({ playthrough: next });
         }
         if (kind === "preview" && parts.length === 3) {
           const context = contextFor(body);

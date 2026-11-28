@@ -52,7 +52,11 @@ export interface Preset {
   noTools: boolean;
   updatedAt: string;
 }
-export interface Persona { id: string; name: string; description: string; updatedAt: string }
+export interface Persona {
+  id: string; name: string; description: string; updatedAt: string;
+  /** Tavern 2.1: a small picture (data URL, at most 64 KB) and the characters this persona is the default for. */
+  avatar?: string; characterIds?: string[];
+}
 export interface TavernSettings { activePresetId: string; activePersonaId: string | null; globalWorldbooks: string[] }
 export interface Playthrough {
   id: string; title: string; characterId: string; greeting: number; presetId: string; personaId: string | null;
@@ -152,7 +156,12 @@ export function normalizePersona(value: unknown, now: string): Persona {
   const raw = isObject(value) ? value : {};
   const name = line(raw.name, 60);
   if (!name) throw new Error("a persona needs a name");
-  return { id: typeof raw.id === "string" && /^u_[0-9a-f]{12}$/.test(raw.id) ? raw.id : newId("u"), name, description: text(raw.description, 8000), updatedAt: now };
+  const avatar = typeof raw.avatar === "string" && raw.avatar.length <= 64 * 1024 && /^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(raw.avatar) ? raw.avatar : undefined;
+  const characterIds = Array.isArray(raw.characterIds) ? [...new Set(raw.characterIds.filter((item): item is string => typeof item === "string" && /^[A-Za-z0-9._-]{1,80}$/.test(item)))].slice(0, 64) : [];
+  return {
+    id: typeof raw.id === "string" && /^u_[0-9a-f]{12}$/.test(raw.id) ? raw.id : newId("u"), name, description: text(raw.description, 8000), updatedAt: now,
+    ...(avatar ? { avatar } : {}), ...(characterIds.length ? { characterIds } : {}),
+  };
 }
 
 export function normalizeSettings(value: unknown, current: Row = {}): TavernSettings {

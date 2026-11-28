@@ -4,11 +4,11 @@
  * information scanning, and the greeting and tool switches. The built-in preset is read-only.
  */
 import { useEffect, useState } from 'react';
-import { ArrowDown, ArrowUp, Copy, Plus, SlidersHorizontal, Star, Trash2 } from 'lucide-react';
+import { ArrowDown, ArrowUp, Copy, GripVertical, Plus, SlidersHorizontal, Star, Trash2 } from 'lucide-react';
 import { useLocale } from '@xueness/host';
 import { failed, remove, savePreset, saveSettings, type Preset, type SectionId } from './api';
 import { useTr } from './i18n';
-import { Empty, NumberField, Toggle, type ViewProps } from './shared';
+import { ConfirmButton, Count, Empty, NumberField, Toggle, type ViewProps } from './shared';
 
 const SECTION_LABELS: Record<SectionId, string> = {
   main: '主提示', persona: '人设', description: '描述', personality: '性格', scenario: '场景',
@@ -44,10 +44,13 @@ export function PresetsView({ library, busy, focus, run, setLibrary, explain, no
     if (failed(result)) explain(result); else { setLibrary(result); setSelectedId(result.settings.activePresetId); }
   });
   const set = <K extends keyof Preset>(key: K, value: Preset[K]) => setDraft(current => ({ ...current, [key]: value }));
+  const [dragFrom, setDragFrom] = useState<number | null>(null);
+  const [dropAt, setDropAt] = useState<number | null>(null);
   const move = (index: number, by: number) => setDraft(current => {
     const sections = [...current.sections], target = index + by;
     if (target < 0 || target >= sections.length) return current;
-    [sections[index], sections[target]] = [sections[target]!, sections[index]!];
+    const [item] = sections.splice(index, 1);
+    sections.splice(target, 0, item!);
     return { ...current, sections };
   });
   const world = (patch: Partial<Preset['worldInfo']>) => setDraft(current => ({ ...current, worldInfo: { ...current.worldInfo, ...patch } }));
@@ -74,7 +77,7 @@ export function PresetsView({ library, busy, focus, run, setLibrary, explain, no
         <div className="xn-tavern-hero__actions">
           {draft.id !== active && <button type="button" className="xn-tavern-button" disabled={busy} onClick={() => void activate(draft.id)}><Star size={14} aria-hidden="true" />{t('设为当前')}</button>}
           <button type="button" className="xn-tavern-button" disabled={busy} onClick={() => void create(draft)}><Copy size={14} aria-hidden="true" />{t('复制')}</button>
-          {!readOnly && <button type="button" className="xn-tavern-icon" disabled={busy} aria-label={t('删除')} title={t('删除')} onClick={() => void drop(draft.id)}><Trash2 size={15} aria-hidden="true" /></button>}
+          {!readOnly && <ConfirmButton label={t('删除预设')} confirm={t('确认删除')} quiet icon={<Trash2 size={15} aria-hidden="true" />} disabled={busy} onConfirm={() => void drop(draft.id)} />}
         </div>
       </header>
       {readOnly && <p className="xn-tavern-note">{t('内置预设不能直接修改，复制后编辑。')}</p>}
@@ -83,13 +86,19 @@ export function PresetsView({ library, busy, focus, run, setLibrary, explain, no
       <section className="xn-tavern-card">
         <h4>{t('主提示')}</h4>
         <textarea rows={5} aria-label={t('主提示')} value={draft.mainPrompt} disabled={readOnly} onChange={event => set('mainPrompt', event.currentTarget.value)} />
+        <Count text={draft.mainPrompt} />
         <small className="xn-tavern-muted">{'{{char}} {{user}} {{persona}} {{scenario}} {{time}} {{date}} {{random:a,b}}'}</small>
         <Toggle checked={draft.preferCardSystemPrompt} disabled={readOnly} onChange={value => set('preferCardSystemPrompt', value)}>{t('角色卡自带系统提示时替换主提示')}</Toggle>
       </section>
 
       <section className="xn-tavern-card">
-        <h4>{t('段落顺序')}</h4>
-        <ol className="xn-tavern-sections">{draft.sections.map((section, index) => <li key={section.id} data-off={!section.enabled || undefined}>
+        <header><h4>{t('段落顺序')}</h4><span className="xn-tavern-muted">{t('拖动或用箭头调整；越靠前越早发给模型。取消勾选的段落不发送。')}</span></header>
+        <ol className="xn-tavern-sections">{draft.sections.map((section, index) => <li key={section.id} data-off={!section.enabled || undefined} data-drop={dropAt === index || undefined}
+          draggable={!readOnly} onDragStart={event => { setDragFrom(index); event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/plain', section.id); }}
+          onDragOver={event => { if (dragFrom === null) return; event.preventDefault(); setDropAt(index); }} onDragLeave={() => setDropAt(current => current === index ? null : current)}
+          onDrop={event => { event.preventDefault(); if (dragFrom !== null && dragFrom !== index) move(dragFrom, index - dragFrom); setDragFrom(null); setDropAt(null); }}
+          onDragEnd={() => { setDragFrom(null); setDropAt(null); }}>
+          {!readOnly && <GripVertical size={14} aria-hidden="true" className="xn-tavern-grip" />}
           <input type="checkbox" aria-label={english ? SECTION_EN[section.id] : SECTION_LABELS[section.id]} checked={section.enabled} disabled={readOnly}
             onChange={event => { const enabled = event.currentTarget.checked; setDraft(current => ({ ...current, sections: current.sections.map(item => item.id === section.id ? { ...item, enabled } : item) })); }} />
           <span>{english ? SECTION_EN[section.id] : SECTION_LABELS[section.id]}</span>

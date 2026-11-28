@@ -14,7 +14,7 @@ export { assembleRoleplay, fillMacros, greetingsOf, type Assembled, type Assembl
 export { createTavernHttp, TAVERN_ROUTES, type TavernHttpOptions } from "./http.ts";
 export { defaultPreset, importSillyTavernPreset, normalizePersona, normalizePreset, normalizeSettings, SECTION_IDS, type Persona, type Playthrough, type Preset, type SectionId, type TavernSettings, type WorldInfoSettings } from "./presets.ts";
 export { applyMacros, roleplayBrief, selectEntries, type Brief, type BriefInput } from "./prompt.ts";
-export { prepareRoleplayRequest, roleplayContext, type RoleplayRequest } from "./roleplay.ts";
+export { prepareRoleplayRequest, roleplayContext, roleplayPresentation, type RoleplayRequest } from "./roleplay.ts";
 export { TavernStore, type TavernKind } from "./store.ts";
 export { activateWorldInfo, keyMatcher, type Activated, type Activation } from "./worldinfo.ts";
 

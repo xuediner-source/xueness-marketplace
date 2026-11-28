@@ -17,7 +17,7 @@
  * that already is a lightweight JSON view (an older host) keeps one JSON reply.
  */
 import type { Character, WorldBook } from "./cards.ts";
-import { assembleRoleplay, type Assembled } from "./assemble.ts";
+import { assembleRoleplay, fillMacros, greetingsOf, type Assembled } from "./assemble.ts";
 import { defaultPreset, normalizeSettings, type Persona, type Playthrough, type Preset } from "./presets.ts";
 import { TavernStore } from "./store.ts";
 
@@ -70,6 +70,31 @@ export function roleplayContext(store: TavernStore, ref: string, sessionId: stri
   const books = [...new Set([...playthrough.worldbooks, ...settings.globalWorldbooks])]
     .map(id => store.get<WorldBook>("worldbooks", id)).filter((book): book is WorldBook => book !== null);
   return { playthrough, character, preset, persona, books };
+}
+
+/**
+ * How a Tavern chat presents itself in the conversation view: the character's and the persona's names and
+ * pictures (read from `/api/tavern/avatars/...`), and the chosen opening line with its macros filled, shown
+ * before the first message when the preset sends the greeting as the character's first message.
+ */
+export function roleplayPresentation(options: { stateDir: string }, session: Row): Row | null {
+  const refs = session.plugin_refs, ref = isObject(refs) && typeof refs.tavern === "string" ? refs.tavern : null;
+  const sessionId = typeof session.id === "string" ? session.id : "";
+  if (!ref || !sessionId) return null;
+  const context = roleplayContext(new TavernStore(options.stateDir), ref, sessionId);
+  if (!context) return null;
+  const { playthrough, character, preset, persona } = context;
+  const greetings = greetingsOf(character), index = Math.max(0, Math.min(greetings.length - 1, Math.trunc(playthrough.greeting) || 0));
+  const values = { char: character.name, user: persona?.name || "User", persona: persona?.description ?? "", description: character.description, personality: character.personality, scenario: character.scenario };
+  const seed = `${sessionId}:0`;
+  const text = greetings.length && preset.greetingInHistory ? fillMacros(fillMacros(greetings[index]!, values, seed), values, seed).trim() : "";
+  const picture = (kind: "characters" | "personas", id: string, has: boolean): string | null => has ? `/api/tavern/avatars/${kind}/${encodeURIComponent(id)}` : null;
+  return {
+    plugin: "tavern", panel: "tavern", chat: true,
+    assistant: { name: character.name, avatarUrl: picture("characters", character.id, !!character.avatar) },
+    user: persona ? { name: persona.name, avatarUrl: picture("personas", persona.id, !!persona.avatar) } : null,
+    opening: text ? { text, index, total: greetings.length } : null,
+  };
 }
 
 export function prepareRoleplayRequest(options: { stateDir: string }, session: Row, request: RoleplayRequest, view: { lightweight: boolean }): RoleplayRequest {
