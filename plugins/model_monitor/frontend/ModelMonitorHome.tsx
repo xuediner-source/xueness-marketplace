@@ -75,7 +75,7 @@ export function ModelMonitorHomeView({ sessionId, providerId, requestedModel, pr
           <p>{tr(row?.outcome === 'error' ? '本次请求未完成，未获得可用的返回型号。'
             : state === 'different' ? '返回字段与请求型号不同，可能是别名或上游路由；不据此推断底层模型。' : state === 'unreported' ? '上游没有提供返回型号，暂时无法比较。' : '请求型号与接口返回字段一致。')}</p>
           {changed && <p>{tr('模型选择已更改，以上展示本会话的上次响应。')}{requestedModel && <code>{requestedModel}</code>}</p>}
-          <small>{providerName && !changed ? providerName : row?.providerId || tr('环境模型')} · {row?.protocol} · <time dateTime={row?.at}>{row?.at && new Date(row.at).toLocaleString()}</time></small>
+          <small>{providerName && !changed ? providerName : row?.providerId || tr('环境模型')} · {row?.protocol ? `${row.protocol} · ` : ''}<time dateTime={row?.at}>{row?.at && new Date(row.at).toLocaleString()}</time></small>
         </>}
         {onRefresh && <button type="button" onClick={onRefresh}><RefreshCw size={12} aria-hidden="true" />{tr('刷新')}</button>}
       </div>
