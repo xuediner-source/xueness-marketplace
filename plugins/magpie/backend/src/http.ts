@@ -251,7 +251,9 @@ const HANDLERS: Record<string, Handler> = {
   "DELETE /api/magpie/groups/:id": (s, p) => s.deleteGroup(p["id"] ?? ""),
   "GET /api/magpie/models": (s) => s.models(),
   "GET /api/magpie/usage": (s, _p, q) => {
-    const period = typeof q["period"] === "string" && q["period"] !== "" ? q["period"] : "today";
+    // Query values arrive as string arrays (`?period=week` is `["week"]`).
+    const raw: unknown = Array.isArray(q["period"]) ? q["period"][0] : q["period"];
+    const period = typeof raw === "string" && raw !== "" ? raw : "today";
     return s.usage(oneOf(period, PERIODS, "period"));
   },
 };

@@ -162,9 +162,14 @@ function totalsOf(group: Dict): Dict {
   };
 }
 
+/** magpie names its usage windows today, 7d, 30d and all; any other name answers 30d. */
+const UPSTREAM_PERIOD: Record<Period, string> = { today: "today", week: "7d", month: "30d" };
+const PANEL_PERIOD: Record<string, Period> = { today: "today", "7d": "week", "30d": "month" };
+
+/** The window magpie answered, in the panel's names. */
 export function normalizeUsage(raw: Dict, period: string): Dict {
   return {
-    period: str(raw["period"]) ?? period,
+    period: PANEL_PERIOD[str(raw["period"]) ?? ""] ?? period,
     totals: totalsOf(raw),
     byModel: dicts(raw["models"]).map((group) => ({
       model: str(group["provider"]) !== null && str(group["model"]) !== null ? `${str(group["provider"])}/${str(group["model"])}` : str(group["id"]) ?? "",
@@ -392,7 +397,7 @@ export function createMagpie(options: MagpieOptions) {
       return { ok: true };
     },
     models: async () => ({ models: await readModels(true) }),
-    usage: async (period: Period) => normalizeUsage(await gateway(`/v1/magpie/usage?period=${period}`), period),
+    usage: async (period: Period) => normalizeUsage(await gateway(`/v1/magpie/usage?period=${UPSTREAM_PERIOD[period]}`), period),
   };
 
   const profiles = createProfiles(store, { layout, available, gateway: { ensure, get gatewayUrl() { return supervisor.gatewayUrl; } } });

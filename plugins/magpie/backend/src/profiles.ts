@@ -69,6 +69,7 @@ export class ModelStore {
 
   /** Replace the kept list; a failed disk write keeps the in-memory list. */
   set(models: Model[]): void {
+    if (this.models !== null && JSON.stringify(this.models) === JSON.stringify(models)) return;
     this.models = models;
     try { writeModelsCache(this.layout, models); } catch { /* the next refresh writes it again */ }
   }

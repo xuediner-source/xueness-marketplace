@@ -39,10 +39,27 @@ export function isGroupId(id: string): boolean {
   return id.startsWith("group/") || id.startsWith("auto/");
 }
 
+function supportsTextOutput(row: Dict): boolean {
+  const modalities = typeof row["modalities"] === "object" && row["modalities"] !== null
+    ? (row["modalities"] as Dict)["output"]
+    : undefined;
+  const outputs = Array.isArray(modalities)
+    ? modalities
+    : Array.isArray(row["output_modalities"])
+      ? row["output_modalities"]
+      : Array.isArray(row["outputs"])
+        ? row["outputs"]
+        : null;
+  if (outputs === null) return true;
+  const kinds = outputs.filter((item): item is string => typeof item === "string" && item.trim() !== "");
+  return kinds.length === 0 || kinds.some((kind) => kind.toLowerCase() === "text");
+}
+
 function toModel(row: Dict): Model | null {
   const id = text(row["id"]);
   if (id === null) return null;
   const group = isGroupId(id);
+  if (!group && !supportsTextOutput(row)) return null;
   return {
     id,
     name: text(row["display_name"]) ?? id,

@@ -25,6 +25,8 @@ export interface Layout {
   readonly config: string;
   /** `XDG_CACHE_HOME` for magpie. */
   readonly cache: string;
+  /** `XDG_STATE_HOME` for magpie plugins and bridges. */
+  readonly state: string;
   /** The bundled program, its licence and `upstream.json`. */
   readonly assets: string;
   /** The bundled magpie program (`magpie.exe` on Windows). */
@@ -36,7 +38,7 @@ export function magpieLayout(stateDir: string, env: NodeJS.ProcessEnv = process.
   const root = join(stateDir, "magpie");
   const assetDir = assets ?? resolve(import.meta.dirname, "..", "assets");
   const binary = join(assetDir, process.platform === "win32" ? "magpie.exe" : "magpie");
-  return { root, config: join(root, "config"), cache: join(root, "cache"), assets: assetDir, binary, env };
+  return { root, config: join(root, "config"), cache: join(root, "cache"), state: join(root, "state"), assets: assetDir, binary, env };
 }
 
 export interface Runtime {
@@ -86,7 +88,7 @@ function writeAtomic(path: string, text: string): void {
 }
 
 export function ensureLayout(layout: Layout): void {
-  for (const dir of [layout.root, layout.config, layout.cache]) mkdirSync(dir, { recursive: true, mode: 0o700 });
+  for (const dir of [layout.root, layout.config, layout.cache, layout.state]) mkdirSync(dir, { recursive: true, mode: 0o700 });
 }
 
 export function writeRuntime(layout: Layout, runtime: Runtime): void {

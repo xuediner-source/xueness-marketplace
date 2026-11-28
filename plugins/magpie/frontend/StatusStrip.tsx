@@ -1,4 +1,4 @@
-/** The status strip above the tabs: process state, gateway URL and controls. */
+/** The status strip above the views: process state, gateway URL, account discovery and controls. */
 import { ExternalLink, Play, RotateCw, Square } from "lucide-react";
 import type { Status } from "./api";
 import { useTr } from "./i18n";
@@ -30,7 +30,7 @@ export function StatusStrip({ status, busy, error, onStart, onStop, onRestart, o
             <button type="button" className="xn-mp-btn" disabled={busy || moving} onClick={onStop}><Square size={13} aria-hidden="true" />{t("停止")}</button>
           </>
           : <button type="button" className="xn-mp-btn xn-mp-btn--primary" disabled={busy || moving} onClick={onStart}><Play size={13} aria-hidden="true" />{status.state === "failed" ? t("重试启动") : t("启动")}</button>}
-        <button type="button" className="xn-mp-btn" disabled={busy || moving} onClick={onConsole}><ExternalLink size={13} aria-hidden="true" />{t("打开完整 magpie 控制台")}</button>
+        {running && <button type="button" className="xn-mp-btn" disabled={busy || moving} onClick={onConsole} title={t("在系统浏览器中打开 magpie 控制台")}><ExternalLink size={13} aria-hidden="true" />{t("在浏览器中打开")}</button>}
       </div>
     </div>
     <div className="xn-mp-strip__gateway">

@@ -43,7 +43,7 @@ export class MagpieStartError extends Error {
   }
 }
 
-const sleep = (ms: number): Promise<void> => new Promise((resolve) => { setTimeout(resolve, ms).unref(); });
+const sleep = (ms: number): Promise<void> => new Promise((resolve) => { setTimeout(resolve, ms); });
 
 /** Anything that looks like a key or token never reaches the log buffer. */
 export function redact(line: string, webKey = ""): string {
@@ -201,6 +201,7 @@ export class Supervisor {
     }
     env["XDG_CONFIG_HOME"] = this.layout.config;
     env["XDG_CACHE_HOME"] = this.layout.cache;
+    env["XDG_STATE_HOME"] = this.layout.state;
     env["MAGPIE_ADDR"] = `127.0.0.1:${runtime.gatewayPort}`;
     env["MAGPIE_WEB_KEY"] = runtime.webKey;
     env["DO_NOT_TRACK"] = "1";

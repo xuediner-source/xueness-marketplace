@@ -3,14 +3,14 @@
 Xueness 的可下载官方插件。它不改写 magpie：包里是 [yetone/magpie](https://github.com/yetone/magpie)（MIT，Copyright (c) 2026 yetone）发布页 [yetone/magpie-releases](https://github.com/yetone/magpie-releases) 的**原版命令行程序**（`magpie-cli-<os>-<arch>`，按平台各一个包），外加一层 Xueness 适配：
 
 - 后端（`backend/src`）在用户启用插件后按需启动 `magpie serve --web=127.0.0.1:<网页端口>`，数据放在 Xueness 状态目录的 `magpie/` 下（`XDG_CONFIG_HOME`/`XDG_CACHE_HOME` 指向这里），固定自己的网关端口与网页密钥，关闭遥测（`DO_NOT_TRACK=1`、`MAGPIE_NO_STATS=1`）与自动更新；禁用或卸载插件时通过 `POST /api/window/quit` 正常退出，超时再结束进程。
-- magpie 的模型与路由组经它的 OpenAI 兼容网关进入 Xueness 的会话模型选择。
-- 界面（`frontend/`）是 Xueness 风格的设置面板，通过下面的 `/api/magpie/*` 接口工作；magpie 自己的完整控制台仍可从面板打开。
+- magpie 的模型与路由组经它的 OpenAI 兼容网关进入 Xueness 的会话模型选择，并在「模型设置」里以只读的「Magpie 模型网关」分组列出（可设为当前运行所用模型，或跳到本插件管理）。
+- 界面（`frontend/`）只做适配，不另做一套管理界面：顶部是进程状态条（启动、停止、重启、账号发现开关、网关地址、最近输出），下面两个视图——「Magpie 控制台」把 magpie 原版网页控制台内嵌进来（供应商、密钥、登录账号、路由组、额度与用量都在那里管理，也可在系统浏览器中打开），「在 Xueness 中使用」列出它的模型并刷新会话的模型列表。
 
 The original magpie CLI binary is bundled unmodified (one package per platform); the version and the SHA-256 of every binary are pinned in `backend/upstream.json`. `scripts/build.ts` reads the binaries from a local folder (`--bin-dir`), checks them against those digests and never downloads anything.
 
 ## Xueness 接口约定 · Route contract
 
-All routes live under `/api/magpie` in the Xueness server, are only served while the plugin is enabled and installed (otherwise `403 {error, plugin: "magpie"}`), and answer JSON. The adapter talks to magpie from the backend only: magpie's page key and port never reach the browser, except through `GET /console`, which the user asks for explicitly. Field values that magpie does not report are `null`, never invented.
+All routes live under `/api/magpie` in the Xueness server, are only served while the plugin is enabled and installed (otherwise `403 {error, plugin: "magpie"}`), and answer JSON. The adapter talks to magpie from the backend only: magpie's page key and port never reach the browser, except through `GET /console`, which the panel asks for only while magpie is running and the user has its console view or the open-in-browser button in front of them (the embedded console is an iframe on that address). The provider, account, routing-group and usage routes below stay part of the contract for scripts and tests; the 1.1 panel leaves that management to magpie's own console. Field values that magpie does not report are `null`, never invented.
 
 Routes marked *(starts)* start magpie on demand when it is stopped; the others never start it.
 
